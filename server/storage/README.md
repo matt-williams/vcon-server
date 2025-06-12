@@ -20,6 +20,7 @@ The following storage backends are supported:
 - **Redis** (`redis_storage/`): In-memory data structure store
 - **SFTP** (`sftp/`): Secure file transfer protocol storage
 - **File** (`file/`): Local file system storage
+- **Azure Blob** (`azureblob/`): Azure Blob storage
 
 ## Configuration
 
