@@ -56,6 +56,12 @@ from settings import (
     API_ROOT_PATH,
     VCON_INDEX_EXPIRY,
     VCON_REDIS_EXPIRY,
+    API_ALLOWS_WRITE,
+    API_ALLOWS_INGRESS,
+    API_ALLOWS_EGRESS,
+    API_REDACT_TEL,
+    API_REDACT_MAILTO,
+    API_REDACT_NAME,
 )
 from storage.base import Storage
 
@@ -273,6 +279,8 @@ async def get_vcon_egress(
     Raises:
         HTTPException: If there is an error accessing Redis
     """
+    if not API_ALLOWS_EGRESS:
+        raise HTTPException(status_code=403, detail="Egress access is not allowed")
     try:
         vcon_uuids = []
         for _ in range(limit):
@@ -284,6 +292,27 @@ async def get_vcon_egress(
     except Exception as e:
         logger.error(f"Error in get_vcon_egress: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to pop from egress list")
+
+def maybe_redact(vcon: Dict) -> Dict:
+    """Redact sensitive information from a vCon dictionary.
+
+    Args:
+        vcon: Dictionary representing a vCon
+
+    Returns:
+        Redacted vCon dictionary
+    """
+    for party in vcon.get("parties", []):
+        if API_REDACT_TEL:
+            if "tel" in party:
+                del party["tel"]
+        if API_REDACT_MAILTO:
+            if "mailto" in party:
+                del party["mailto"]
+        if API_REDACT_NAME:
+            if "name" in party:
+                del party["name"]
+    return vcon
 
 
 @api_router.get(
@@ -325,7 +354,7 @@ async def get_vcon(vcon_uuid: UUID) -> JSONResponse:
 
     if not vcon:
         raise HTTPException(status_code=404, detail="vCon not found")
-        
+    vcon = maybe_redact(vcon)
     return JSONResponse(content=vcon)
 
 
@@ -370,6 +399,7 @@ async def get_vcons(
                     await add_vcon_to_set(str(vcon_uuid), timestamp)
                     break
         results.append(vcon)
+    results = [maybe_redact(vcon) for vcon in results if vcon is not None]
 
     return JSONResponse(content=results, status_code=200)
 
@@ -403,6 +433,13 @@ async def search_vcons(
     """
     if tel is None and mailto is None and name is None:
         raise HTTPException(status_code=400, detail="At least one search parameter must be provided")
+
+    if tel and API_REDACT_TEL:
+        raise HTTPException(status_code=403, detail="Tel is redacted - tel search is not allowed")
+    if mailto and API_REDACT_MAILTO:
+        raise HTTPException(status_code=403, detail="Mailto is redacted - mailto search is not allowed")
+    if name and API_REDACT_NAME:
+        raise HTTPException(status_code=403, detail="Name is redacted - name search is not allowed")
 
     try:
         tel_keys = set()
@@ -478,6 +515,8 @@ async def post_vcon(
     Raises:
         HTTPException: If there is an error storing the vCon
     """
+    if not API_ALLOWS_WRITE:
+        raise HTTPException(status_code=403, detail="Write access is not allowed")
     try:
         dict_vcon = inbound_vcon.model_dump()
         dict_vcon["uuid"] = str(inbound_vcon.uuid)
@@ -524,6 +563,8 @@ async def delete_vcon(vcon_uuid: UUID) -> None:
     Raises:
         HTTPException: If there is an error deleting the vCon
     """
+    if not API_ALLOWS_WRITE:
+        raise HTTPException(status_code=403, detail="Write access is not allowed")
     try:
         await redis_async.json().delete(f"vcon:{str(vcon_uuid)}")
     except Exception:
@@ -554,6 +595,8 @@ async def post_vcon_ingress(
     Raises:
         HTTPException: If there is an error adding to the ingress list
     """
+    if not API_ALLOWS_INGRESS:
+        raise HTTPException(status_code=403, detail="Ingress access is not allowed")
     try:
         for vcon_id in vcon_uuids:
             await redis_async.rpush(ingress_list, vcon_id)
@@ -665,6 +708,8 @@ async def post_dlq_reprocess(
     Raises:
         HTTPException: If there is an error reprocessing the DLQ
     """
+    if not API_ALLOWS_INGRESS:
+        raise HTTPException(status_code=403, detail="Ingress access is not allowed")
     try:
         dlq_name = get_ingress_list_dlq_name(ingress_list)
         counter = 0
@@ -698,6 +743,8 @@ async def get_dlq_vcons(
     Raises:
         HTTPException: If there is an error reading the DLQ
     """
+    if not API_ALLOWS_INGRESS:
+        raise HTTPException(status_code=403, detail="Ingress access is not allowed")
     try:
         dlq_name = get_ingress_list_dlq_name(ingress_list)
         vcons = await redis_async.lrange(dlq_name, 0, -1)
@@ -758,6 +805,8 @@ async def index_vcons() -> JSONResponse:
     Raises:
         HTTPException: If there is an error rebuilding the index
     """
+    if not API_ALLOWS_WRITE:
+        raise HTTPException(status_code=403, detail="Write access is not allowed")
     try:
         vcon_keys = await redis_async.keys("vcon:*")
         for key in vcon_keys:

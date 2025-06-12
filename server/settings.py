@@ -17,6 +17,12 @@ LOGGING_CONFIG_FILE = os.getenv("LOGGING_CONFIG_FILE", Path(__file__).parent / '
 CONSERVER_API_TOKEN = os.getenv("CONSERVER_API_TOKEN")
 CONSERVER_API_TOKEN_FILE = os.getenv("CONSERVER_API_TOKEN_FILE")
 CONSERVER_HEADER_NAME = os.getenv("CONSERVER_HEADER_NAME", "x-conserver-api-token")
+API_ALLOWS_WRITE = (os.getenv("API_ALLOWS_WRITE", "Y") == "Y")
+API_ALLOWS_INGRESS = (os.getenv("API_ALLOWS_EGRESS", "Y") == "Y")
+API_ALLOWS_EGRESS = (os.getenv("API_ALLOWS_EGRESS", "Y") == "Y")
+API_REDACT_TEL = (os.getenv("API_REDACT_TEL", "N") == "Y")
+API_REDACT_MAILTO = (os.getenv("API_REDACT_MAILTO", "N") == "Y")
+API_REDACT_NAME = (os.getenv("API_REDACT_NAME", "N") == "Y")
 
 DEEPGRAM_KEY = os.getenv("DEEPGRAM_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
