@@ -49,6 +49,39 @@ services:
       - "com.datadoghq.ad.init_configs=[{}]"
       - "com.datadoghq.ad.instances=[{'python_service': 'conserver.api'}]"
 
+  redacted_api:
+    build:
+      dockerfile: ./docker/Dockerfile
+      context: .
+    command: /bin/bash -c "poetry run uvicorn server.api:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - .:/app
+    ports:
+      - "${CONSERVER_EXTERNAL_PORT:-7999}:8000"
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    environment:
+      - API_ALLOWS_WRITE=N
+      - API_ALLOWS_INGRESS=N
+      - API_ALLOWS_EGRESS=N
+      - API_REDACT_TEL=Y
+      - API_REDACT_MAILTO=Y
+      - API_REDACT_NAME=Y
+    networks:
+      - conserver
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`${DNS_HOST}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.services.api.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api"
+      - "com.datadoghq.ad.check_names=['python']"
+      - "com.datadoghq.ad.init_configs=[{}]"
+      - "com.datadoghq.ad.instances=[{'python_service': 'conserver.api'}]"
+
   redis:
     image: "redis/redis-stack:latest"
     ports:
